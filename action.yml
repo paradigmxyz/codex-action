@@ -55,6 +55,10 @@ inputs:
     description: "Reasoning effort the agent should use."
     required: false
     default: ""
+  service-tier:
+    description: "Service tier for API requests. One of 'fast' or 'flex'. If empty, the default tier is used. 'fast' maps to OpenAI's 'priority' tier for lower latency."
+    required: false
+    default: ""
   codex-home:
     description: "Directory to use as the Codex home directory. If empty, the default Codex home directory will be used."
     required: false
@@ -245,13 +249,43 @@ runs:
         SERVER_INFO_FILE: ${{ steps.derive_server_info.outputs.server_info_file }}
       run: node "$ACTION_PATH/dist/main.js" read-server-info "$SERVER_INFO_FILE"
 
+    - name: Start service tier proxy
+      id: service_tier_proxy
+      if: ${{ inputs['service-tier'] != '' && inputs['openai-api-key'] != '' }}
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        UPSTREAM_PORT: ${{ steps.read_server_info.outputs.port }}
+        SERVICE_TIER: ${{ inputs['service-tier'] }}
+      run: |
+        SERVICE_TIER_INFO=$(mktemp)
+        node "$ACTION_PATH/dist/main.js" start-service-tier-proxy \
+          --upstream-port "$UPSTREAM_PORT" \
+          --service-tier "$SERVICE_TIER" \
+          --server-info "$SERVICE_TIER_INFO" &
+
+        for _ in {1..20}; do
+          if [ -s "$SERVICE_TIER_INFO" ]; then
+            break
+          fi
+          sleep 0.5
+        done
+
+        if [ ! -s "$SERVICE_TIER_INFO" ]; then
+          echo "Service tier proxy did not start" >&2
+          exit 1
+        fi
+
+        PORT=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$SERVICE_TIER_INFO','utf8')).port)")
+        echo "port=$PORT" >> "$GITHUB_OUTPUT"
+
     - name: Write Codex proxy config
       if: ${{ inputs['openai-api-key'] != '' }}
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
         CODEX_HOME: ${{ steps.resolve_home.outputs.codex-home }}
-        PROXY_PORT: ${{ steps.read_server_info.outputs.port }}
+        PROXY_PORT: ${{ steps.service_tier_proxy.outputs.port || steps.read_server_info.outputs.port }}
         SAFETY_STRATEGY: ${{ inputs['safety-strategy'] }}
       run: |
         node "$ACTION_PATH/dist/main.js" write-proxy-config \

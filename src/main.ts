@@ -17,6 +17,7 @@ import { ensureActorHasWriteAccess } from "./checkActorPermissions";
 import parseArgsStringToArgv from "string-argv";
 import { writeProxyConfig } from "./writeProxyConfig";
 import { checkOutput } from "./checkOutput";
+import { startServiceTierProxy } from "./serviceTierProxy";
 
 export async function main() {
   const program = new Command();
@@ -93,6 +94,38 @@ export async function main() {
       }) => {
         const safetyStrategy = toSafetyStrategy(options.safetyStrategy);
         await writeProxyConfig(options.codexHome, options.port, safetyStrategy);
+      }
+    );
+
+  program
+    .command("start-service-tier-proxy")
+    .description(
+      "Start a local proxy that injects service_tier into API request bodies"
+    )
+    .requiredOption(
+      "--upstream-port <port>",
+      "Port of the upstream responses-api-proxy",
+      parseIntStrict
+    )
+    .requiredOption(
+      "--service-tier <tier>",
+      "Service tier to inject ('fast' or 'flex')"
+    )
+    .requiredOption(
+      "--server-info <FILE>",
+      "File to write the proxy's port info to"
+    )
+    .action(
+      async (options: {
+        upstreamPort: number;
+        serviceTier: string;
+        serverInfo: string;
+      }) => {
+        await startServiceTierProxy(
+          options.upstreamPort,
+          options.serviceTier,
+          options.serverInfo
+        );
       }
     );
 
