@@ -24,15 +24,22 @@ export async function startServiceTierProxy(
     req.on("end", () => {
       let body = Buffer.concat(chunks);
 
+      let injected = false;
       if (req.method === "POST") {
         try {
           const json = JSON.parse(body.toString("utf8"));
           json.service_tier = apiServiceTier;
           body = Buffer.from(JSON.stringify(json));
+          injected = true;
         } catch {
           // Not valid JSON — forward as-is.
         }
       }
+
+      console.log(
+        `[service-tier-proxy] ${req.method} ${req.url} → upstream:${upstreamPort}` +
+          (injected ? ` (injected service_tier=${apiServiceTier})` : "")
+      );
 
       const headers = { ...req.headers };
       headers["content-length"] = body.length.toString();
