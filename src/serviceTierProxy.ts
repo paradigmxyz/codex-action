@@ -1,5 +1,5 @@
 import http from "node:http";
-import { writeFile } from "node:fs/promises";
+import { appendFile, writeFile } from "node:fs/promises";
 
 const SERVICE_TIER_MAP: Record<string, string> = {
   fast: "priority",
@@ -9,7 +9,8 @@ const SERVICE_TIER_MAP: Record<string, string> = {
 export async function startServiceTierProxy(
   upstreamPort: number,
   serviceTier: string,
-  serverInfoFile: string
+  serverInfoFile: string,
+  logFile: string | null
 ): Promise<void> {
   const apiServiceTier = SERVICE_TIER_MAP[serviceTier];
   if (!apiServiceTier) {
@@ -36,10 +37,13 @@ export async function startServiceTierProxy(
         }
       }
 
-      console.log(
+      const logLine =
         `[service-tier-proxy] ${req.method} ${req.url} → upstream:${upstreamPort}` +
-          (injected ? ` (injected service_tier=${apiServiceTier})` : "")
-      );
+        (injected ? ` (injected service_tier=${apiServiceTier})` : "");
+      console.log(logLine);
+      if (logFile) {
+        appendFile(logFile, logLine + "\n").catch(() => {});
+      }
 
       const headers = { ...req.headers };
       headers["content-length"] = body.length.toString();

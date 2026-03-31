@@ -259,10 +259,12 @@ runs:
         SERVICE_TIER: ${{ inputs['service-tier'] }}
       run: |
         SERVICE_TIER_INFO=$(mktemp)
+        SERVICE_TIER_LOG=$(mktemp)
         node "$ACTION_PATH/dist/main.js" start-service-tier-proxy \
           --upstream-port "$UPSTREAM_PORT" \
           --service-tier "$SERVICE_TIER" \
-          --server-info "$SERVICE_TIER_INFO" &
+          --server-info "$SERVICE_TIER_INFO" \
+          --log-file "$SERVICE_TIER_LOG" &
 
         for _ in {1..20}; do
           if [ -s "$SERVICE_TIER_INFO" ]; then
@@ -278,6 +280,7 @@ runs:
 
         PORT=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$SERVICE_TIER_INFO','utf8')).port)")
         echo "port=$PORT" >> "$GITHUB_OUTPUT"
+        echo "log_file=$SERVICE_TIER_LOG" >> "$GITHUB_OUTPUT"
 
     - name: Write Codex proxy config
       if: ${{ inputs['openai-api-key'] != '' }}
@@ -383,3 +386,16 @@ runs:
             --effort "$CODEX_EFFORT" \
             --safety-strategy "$CODEX_SAFETY_STRATEGY" \
             --codex-user "$CODEX_USER"
+
+    - name: Show service tier proxy logs
+      if: ${{ always() && steps.service_tier_proxy.outputs.log_file != '' }}
+      shell: bash
+      env:
+        LOG_FILE: ${{ steps.service_tier_proxy.outputs.log_file }}
+      run: |
+        echo "=== Service tier proxy request log ==="
+        if [ -s "$LOG_FILE" ]; then
+          cat "$LOG_FILE"
+        else
+          echo "(no requests logged)"
+        fi

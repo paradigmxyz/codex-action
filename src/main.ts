@@ -115,16 +115,19 @@ export async function main() {
       "--server-info <FILE>",
       "File to write the proxy's port info to"
     )
+    .option("--log-file <FILE>", "File to write per-request logs to")
     .action(
       async (options: {
         upstreamPort: number;
         serviceTier: string;
         serverInfo: string;
+        logFile?: string;
       }) => {
         await startServiceTierProxy(
           options.upstreamPort,
           options.serviceTier,
-          options.serverInfo
+          options.serverInfo,
+          options.logFile ?? null
         );
       }
     );
